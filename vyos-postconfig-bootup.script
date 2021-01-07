@@ -1,0 +1,75 @@
+#!/bin/sh
+ipset -N china hash:net
+for subnet in `cat /config/user-data/iptables/china.txt`; d
+o ipset add china $subnet;done
+ipset -N google hash:net
+for subnet in `cat /config/user-data/iptables/google.txt`; 
+do ipset add google $subnet;done
+
+#
+/usr/sbin/modprobe ip_tables
+/usr/sbin/modprobe ip_conntrack
+/usr/sbin/modprobe iptable_filter
+/usr/sbin/modprobe iptable_mangle
+/usr/sbin/modprobe iptable_nat
+/usr/sbin/modprobe ipt_LOG
+/usr/sbin/modprobe ipt_limit
+/usr/sbin/modprobe ipt_state
+
+iptables-legacy -t mangle -N SS
+
+# It's very IMPORTANT, just be careful.
+for i in `cat /config/user-data/iptables/localips`; do
+iptables-legacy -t mangle -A SS -d $i -j RETURN -m mark --m
+ark 0xff
+iptables-legacy -t mangle -A SS_MARK -d $i -j RETURN -m mark --mark 0xff
+done
+
+# Redirect google
+#iptables-legacy -t nat -A SHADOWSOCKS -p tcp -m set --matc
+h-set google dst -j REDIRECT --to-port 1082
+#iptables-legacy -t nat -A SHADOWSOCKS_MARK -p tcp -m set -
+-match-set google dst -j MARK --set-mark 1
+
+# Redirect Hulu
+#iptables-legacy -t nat -A SHADOWSOCKS -p tcp -m set --match-set hulu dst -j REDIRECT --to-port 1081
+#iptables-legacy -t nat -A SHADOWSOCKS_MARK -p tcp -m set --match-set hulu dst -j MARK --set-mark 1
+
+# Ignore CHN route list
+iptables-legacy -t mangle -A SS -m set --match-set china dst -j RETURN -m mark --mark 0xff
+iptables-legacy -t mangle -A SS_MARK -m set --match-set china dst -j RETURN -m mark --mark 0xff
+
+##############################################
+# FULLCONENAT Rules
+iptables-legacy -t nat -I POSTROUTING -o pppoe0 -j FULLCONE
+NAT
+iptables-legacy -t nat -I PREROUTING -i pppoe0 -j FULLCONEN
+AT
+iptables-legacy -t nat -I PREROUTING -i eth0 -j FULLCONENAT
+iptables-legacy -t nat -I PREROUTING -i eth2 -j FULLCONENAT
+iptables-legacy -t nat -I PREROUTING -i wg0 -j FULLCONENAT
+
+##############################################
+
+# Strategy Route
+ip -4 route add local 0/0 dev lo table 100
+ip -4 rule add fwmark 0x2333 table 100
+#ip -6 route add local ::/0 dev lo table 100
+#ip -6 rule add fwmark 0x2333 table 100
+
+#ip6tables -t mangle -N SS
+
+
+# TPROXY TCP/UDP mark 0x2333 to port 1080
+iptables-legacy -t mangle -A SS -p udp -j TPROXY --on-port 
+1080 --tproxy-mark 0x2333
+iptables-legacy -t mangle -A SS -p tcp -j TPROXY --on-port 
+1080 --tproxy-mark 0x2333
+#ip6tables -t mangle -A SS -p udp -j TPROXY --on-port 1080 
+--tproxy-mark 0x2333
+#ip6tables -t mangle -A SS -p tcp -j TPROXY --on-port 1080 
+--tproxy-mark 0x2333
+
+# Apply
+iptables-legacy -t mangle -A PREROUTING -j SS
+#ip6tables -t mangle -A PREROUTING -j SS
