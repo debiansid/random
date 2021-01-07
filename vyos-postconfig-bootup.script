@@ -20,16 +20,13 @@ iptables-legacy -t mangle -N SS
 
 # It's very IMPORTANT, just be careful.
 for i in `cat /config/user-data/iptables/localips`; do
-iptables-legacy -t mangle -A SS -d $i -j RETURN -m mark --m
-ark 0xff
+iptables-legacy -t mangle -A SS -d $i -j RETURN -m mark --mark 0xff
 iptables-legacy -t mangle -A SS_MARK -d $i -j RETURN -m mark --mark 0xff
 done
 
 # Redirect google
-#iptables-legacy -t nat -A SHADOWSOCKS -p tcp -m set --matc
-h-set google dst -j REDIRECT --to-port 1082
-#iptables-legacy -t nat -A SHADOWSOCKS_MARK -p tcp -m set -
--match-set google dst -j MARK --set-mark 1
+#iptables-legacy -t nat -A SHADOWSOCKS -p tcp -m set --match-set google dst -j REDIRECT --to-port 1082
+#iptables-legacy -t nat -A SHADOWSOCKS_MARK -p tcp -m set --match-set google dst -j MARK --set-mark 1
 
 # Redirect Hulu
 #iptables-legacy -t nat -A SHADOWSOCKS -p tcp -m set --match-set hulu dst -j REDIRECT --to-port 1081
@@ -59,14 +56,10 @@ ip -4 rule add fwmark 0x2333 table 100
 
 
 # TPROXY TCP/UDP mark 0x2333 to port 1080
-iptables-legacy -t mangle -A SS -p udp -j TPROXY --on-port 
-1080 --tproxy-mark 0x2333
-iptables-legacy -t mangle -A SS -p tcp -j TPROXY --on-port 
-1080 --tproxy-mark 0x2333
-#ip6tables -t mangle -A SS -p udp -j TPROXY --on-port 1080 
---tproxy-mark 0x2333
-#ip6tables -t mangle -A SS -p tcp -j TPROXY --on-port 1080 
---tproxy-mark 0x2333
+iptables-legacy -t mangle -A SS -p udp -j TPROXY --on-port 1080 --tproxy-mark 0x2333
+iptables-legacy -t mangle -A SS -p tcp -j TPROXY --on-port 1080 --tproxy-mark 0x2333
+#ip6tables -t mangle -A SS -p udp -j TPROXY --on-port 1080 --tproxy-mark 0x2333
+#ip6tables -t mangle -A SS -p tcp -j TPROXY --on-port 1080 --tproxy-mark 0x2333
 
 # Apply
 iptables-legacy -t mangle -A PREROUTING -j SS
