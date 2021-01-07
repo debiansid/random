@@ -41,10 +41,8 @@ iptables-legacy -t mangle -A SS_MARK -m set --match-set china dst -j RETURN -m m
 
 ##############################################
 # FULLCONENAT Rules
-iptables-legacy -t nat -I POSTROUTING -o pppoe0 -j FULLCONE
-NAT
-iptables-legacy -t nat -I PREROUTING -i pppoe0 -j FULLCONEN
-AT
+iptables-legacy -t nat -I POSTROUTING -o pppoe0 -j FULLCONENAT
+iptables-legacy -t nat -I PREROUTING -i pppoe0 -j FULLCONENAT
 iptables-legacy -t nat -I PREROUTING -i eth0 -j FULLCONENAT
 iptables-legacy -t nat -I PREROUTING -i eth2 -j FULLCONENAT
 iptables-legacy -t nat -I PREROUTING -i wg0 -j FULLCONENAT
