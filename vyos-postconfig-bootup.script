@@ -16,9 +16,9 @@
 
 
 ipset -N china hash:net
-for subnet in `cat /etc/iptables/china.txt`; do ipset add china $subnet;done
+for subnet in `cat /config/user-data/iptables/china.txt`; do ipset add china $subnet;done
 ipset -N google hash:net
-for subnet in `cat /etc/iptables/google.txt`; do ipset add google $subnet;done
+for subnet in `cat /config/user-data/iptables/google.txt`; do ipset add google $subnet;done
 
 
 # Create new chain
@@ -30,7 +30,7 @@ iptables-legacy -t mangle -A SSREDIR -m mark --mark 0x2333 -j RETURN
 
 # Ignore your shadowsocks server's addresses
 # It's very IMPORTANT, just be careful.
-for i in `cat /etc/iptables/localips`; do
+for i in `cat /config/user-data/iptables/localips`; do
 iptables-legacy -t mangle -A SSREDIR -p tcp -d $i -j RETURN
 iptables-legacy -t mangle -A SSREDIR -p udp -d $i -j RETURN
 done
