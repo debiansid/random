@@ -13,7 +13,9 @@
 /usr/sbin/modprobe ipt_limit
 /usr/sbin/modprobe ipt_state
 
-
+#setup unbound
+useradd -d/etc/unbound -s/usr/sbin/nologin unbound
+systemctl start unbound
 
 ipset -N china hash:net
 for subnet in `cat /config/user-data/iptables/china.txt`; do ipset add china $subnet;done
