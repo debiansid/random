@@ -9,5 +9,5 @@ oci compute instance launch\
 –boot-volume-size-in-gbs 100\
 –assign-public-ip true\
 –subnet-id ocid1.subnet.oc1.ap-tokyo-1.xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\
-–shape-config ‘{"ocpus":4,"memoryInGBs":24}’\
+–shape-config ‘{"ocpus":2,"memoryInGBs":12}’\
 –metadata ‘{"ssh_authorized_keys":"ssh-rsa xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"}’ 2>&1
