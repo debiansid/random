@@ -1,0 +1,48 @@
+#!name= Unlock iCloud Private Relay
+#!desc=(BETA) 启用iCloud专用代理，需要Surge 共享网络连接/启用网关模式 给下级设备
+
+[General]
+# > 路由防火墙
+# 包含所有的网络请求
+include-all-networks = true
+
+[Rule]
+# > REJECT AutoNavi Location Services Dispatcher
+DOMAIN,dispatcher.is.autonavi.com,REJECT
+
+# > Apple
+AND,((PROTOCOL,UDP),(DEST-PORT,443),(IP-CIDR,17.0.0.0/8,no-resolve)),DIRECT
+AND,((PROTOCOL,TCP),(DEST-PORT,443),(IP-CIDR,17.0.0.0/8,no-resolve)),Apple
+
+# > iCloud 
+DOMAIN,gateway.icloud.com,Apple
+DOMAIN,metrics.icloud.com,Apple
+# DOMAIN,p102-quota.icloud.com,Apple
+# iCloud services in China
+DOMAIN-SUFFIX,apzones.com,DIRECT
+DOMAIN-SUFFIX,icloud.com.cn,DIRECT
+# iCloud services
+DOMAIN-SUFFIX,icloud-content.com,Apple
+DOMAIN-KEYWORD,content.icloud.com,Apple
+
+# > Apple Content caching
+# https://support.apple.com/en-us/HT210060
+IP-CIDR,17.57.21.63/32,Apple
+# Server registration
+DOMAIN,lcdn-registration.apple.com,Apple
+# Content caching locator service
+DOMAIN,lcdn-locator.apple.com,Apple
+
+# > iCloud Private Relay
+# https://developer.apple.com/cn/support/prepare-your-network-for-icloud-private-relay/
+# https://mask-api.icloud.com/egress-ip-ranges.csv
+
+# Optimize for Private Relay connections
+AND,((PROTOCOL,UDP),(DEST-PORT,443),(DOMAIN,mask-api.icloud.com)),DIRECT
+AND,((PROTOCOL,UDP),(DEST-PORT,443),(DOMAIN,mask.icloud.com)),DIRECT
+AND,((PROTOCOL,UDP),(DEST-PORT,443),(DOMAIN,mask-h2.icloud.com)),DIRECT
+
+# Allow for network traffic audits
+AND,((PROTOCOL,TCP),(DEST-PORT,443),(DOMAIN,mask-api.icloud.com)),Apple
+AND,((PROTOCOL,TCP),(DEST-PORT,443),(DOMAIN,mask.icloud.com)),Apple
+AND,((PROTOCOL,TCP),(DEST-PORT,443),(DOMAIN,mask-h2.icloud.com)),Apple
