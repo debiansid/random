@@ -17,6 +17,12 @@
 useradd -d/etc/unbound -s/usr/sbin/nologin unbound
 #systemctl start unbound
 
+ipset -N china hash:net
+for subnet in `cat /config/user-data/iptables/china.txt`; do ipset add china $subnet;done
+
+ipset -N intranet hash:net
+for subnet in `cat /config/user-data/iptables/intranet.txt`; do ipset add intranet $subnet;done
+
 #start sing-box as user box
 useradd -d/etc/sing-box -s/usr/sbin/nologin box
 #sudo -u box /usr/bin/sing-box -D /var/lib/sing-box -c /etc/sing-box/tp.json run &
@@ -27,36 +33,35 @@ ip route add local default dev lo table 222
 
 iptables-legacy -t mangle -N BOX_EXTERNAL
 iptables-legacy -t mangle -F BOX_EXTERNAL
-iptables-legacy -t mangle -A BOX_EXTERNAL -d 192.168.88.0/24 -j RETURN
-iptables-legacy -t mangle -A BOX_EXTERNAL -d 192.168.1.0/24 -j RETURN
-iptables-legacy -t mangle -A BOX_EXTERNAL -d 0.0.0.0/8 -j RETURN
-iptables-legacy -t mangle -A BOX_EXTERNAL -d 127.0.0.0/8 -j RETURN
-iptables-legacy -t mangle -A BOX_EXTERNAL -d 10.0.0.0/8 -j RETURN
-iptables-legacy -t mangle -A BOX_EXTERNAL -d 172.16.0.0/12 -j RETURN
-iptables-legacy -t mangle -A BOX_EXTERNAL -d 192.168.0.0/16 -j RETURN
-iptables-legacy -t mangle -A BOX_EXTERNAL -d 169.254.0.0/16 -j RETURN
-iptables-legacy -t mangle -A BOX_EXTERNAL -d 224.0.0.0/4 -j RETURN
-iptables-legacy -t mangle -A BOX_EXTERNAL -d 240.0.0.0/4 -j RETURN
-#iptables-legacy -t mangle -A BOX_EXTERNAL ! -s 192.168.88.0/24 -j RETURN
-iptables-legacy -t mangle -A BOX_EXTERNAL -p tcp -i lo -j TPROXY --on-ip 127.0.0.1 --on-port 1536 --tproxy-mark 222
-iptables-legacy -t mangle -A BOX_EXTERNAL -p udp -i lo -j TPROXY --on-ip 127.0.0.1 --on-port 1536 --tproxy-mark 222
-iptables-legacy -t mangle -A BOX_EXTERNAL -p tcp -i eth0 -j TPROXY --on-ip 127.0.0.1 --on-port 1536 --tproxy-mark 222
-iptables-legacy -t mangle -A BOX_EXTERNAL -p udp -i eth0 -j TPROXY --on-ip 127.0.0.1 --on-port 1536 --tproxy-mark 222
+# Bypass intranet
+iptables-legacy -t mangle -A BOX_EXTERNAL -m set --match-set intranet dst -p udp ! --dport 53 -j RETURN
+iptables-legacy -t mangle -A BOX_EXTERNAL -m set --match-set intranet dst ! -p udp -j RETURN
+
+# Ignore CHN route list
+iptables-legacy -t mangle -A BOX_EXTERNAL -p tcp -m set --match-set china dst -j RETURN
+iptables-legacy -t mangle -A BOX_EXTERNAL -p udp -m set --match-set china dst -j RETURN
+
+iptables-legacy -t mangle -A BOX_EXTERNAL -p tcp -i lo -j TPROXY --on-ip 127.0.0.1 --on-port 1536 --tproxy-mark 22
+2
+iptables-legacy -t mangle -A BOX_EXTERNAL -p udp -i lo -j TPROXY --on-ip 127.0.0.1 --on-port 1536 --tproxy-mark 22
+2
+iptables-legacy -t mangle -A BOX_EXTERNAL -p tcp -i eth0 -j TPROXY --on-ip 127.0.0.1 --on-port 1536 --tproxy-mark
+222
+iptables-legacy -t mangle -A BOX_EXTERNAL -p udp -i eth0 -j TPROXY --on-ip 127.0.0.1 --on-port 1536 --tproxy-mark
+222
 iptables-legacy -t mangle -I PREROUTING -j BOX_EXTERNAL
 
 
 iptables-legacy -t mangle -N BOX_LOCAL
 iptables-legacy -t mangle -F BOX_LOCAL
-iptables-legacy -t mangle -A BOX_LOCAL -d 192.168.88.0/24 -j RETURN
-iptables-legacy -t mangle -A BOX_LOCAL -d 192.168.1.0/24 -j RETURN
-iptables-legacy -t mangle -A BOX_LOCAL -d 0.0.0.0/8 -j RETURN
-iptables-legacy -t mangle -A BOX_LOCAL -d 127.0.0.0/8 -j RETURN
-iptables-legacy -t mangle -A BOX_LOCAL -d 10.0.0.0/8 -j RETURN
-iptables-legacy -t mangle -A BOX_LOCAL -d 172.16.0.0/12 -j RETURN
-iptables-legacy -t mangle -A BOX_LOCAL -d 192.168.0.0/16 -j RETURN
-iptables-legacy -t mangle -A BOX_LOCAL -d 169.254.0.0/16 -j RETURN
-iptables-legacy -t mangle -A BOX_LOCAL -d 224.0.0.0/4 -j RETURN
-iptables-legacy -t mangle -A BOX_LOCAL -d 240.0.0.0/4 -j RETURN
+# Bypass intranet
+iptables-legacy -t mangle -A BOX_LOCAL -m set --match-set intranet dst -p udp ! --dport 53 -j RETURN
+iptables-legacy -t mangle -A BOX_LOCAL -m set --match-set intranet dst ! -p udp -j RETURN
+
+# Ignore CHN route list
+iptables-legacy -t mangle -A BOX_LOCAL -p tcp -m set --match-set china dst -j RETURN
+iptables-legacy -t mangle -A BOX_LOCAL -p udp -m set --match-set china dst -j RETURN
+
 iptables-legacy -t mangle -I BOX_LOCAL -m owner --uid-owner box --gid-owner box -j RETURN
 iptables-legacy -t mangle -A BOX_LOCAL -p tcp -j MARK --set-mark 222
 iptables-legacy -t mangle -A BOX_LOCAL -p udp -j MARK --set-mark 222
@@ -68,7 +73,8 @@ iptables-legacy  -t mangle -A DIVERT -j MARK --set-mark 222
 iptables-legacy  -t mangle -A DIVERT -j ACCEPT
 iptables-legacy  -t mangle -I PREROUTING -p tcp -m socket -j DIVERT
 
-iptables-legacy  -A OUTPUT -d 127.0.0.1 -p tcp -m owner --uid-owner box --gid-owner box -m tcp --dport 1536 -j REJECT
+iptables-legacy  -A OUTPUT -d 127.0.0.1 -p tcp -m owner --uid-owner box --gid-owner box -m tcp --dport 1536 -j REJ
+ECT
 ##############################################
 # FULLCONENAT Rules
 iptables-legacy -t nat -I POSTROUTING -o pppoe0 -j FULLCONENAT
