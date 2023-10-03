@@ -1,0 +1,222 @@
+{
+  "log": {
+    "level": "info",
+    "output": "sing-box.log",
+    "timestamp": true
+  },
+  "dns": {
+    "servers": [
+      {
+        "tag": "cloudflare",
+        "address": "tls://1.1.1.1",
+        "detour": "Proxy"
+      },
+      {
+        "tag": "fakedns",
+        "address": "fakeip"
+      },
+      {
+        "tag": "local",
+        "address": "https://1.12.12.12/dns-query",
+        "detour": "direct"
+      },
+      {
+        "tag": "block",
+        "address": "rcode://success"
+      }
+    ],
+    "rules": [
+      // https://github.com/SagerNet/sing-box/releases/tag/v1.2.2
+      {
+        "outbound": "any",
+        "server": "local",
+        "disable_cache": true
+      },
+      {
+        "clash_mode": "Global",
+        "server": "cloudflare"
+      },
+      {
+        "clash_mode": "Direct",
+        "server": "local"
+      },
+      {
+        "geosite": "category-ads-all",
+        "server": "block"
+      },
+      {
+        "geosite": [
+          "cn",
+          "apple@cn",
+          "category-games@cn",
+          "private"
+        ],
+        "domain_keyword": "ntp",
+        "server": "local"
+      },
+      {
+        "query_type": [
+          "A",
+          "AAAA"
+        ],
+        "server": "fakedns"
+      }
+    ],
+    "fakeip": {
+      "enabled": true,
+      "inet4_range": "198.18.0.0/15",
+      "inet6_range": "fc00::/18"
+    },
+    "strategy": "prefer_ipv4"
+  },
+  "inbounds": [
+    {
+      "type": "mixed",
+      "tag": "mixed-in",
+      "listen": "::",
+      "listen_port": 1080,
+      "sniff": true
+//      "domain_strategy": "prefer_ipv4" // remove this line if you want to resolve the domain remotely (if the server is not sing-box, UDP may not work due to wrong behavior).
+//      "set_system_proxy": false
+    },
+//    {
+//      "type": "tun",
+//      "tag": "tun-in",
+//      "interface_name": "tun3",
+//      "inet4_address": "172.19.0.1/30",
+//      "inet6_address": "fdfe:dcba:9876::1/126",
+//      "stack": "system",
+//      "auto_route": true,
+//      "strict_route": true,
+//      "sniff": true,
+//      "platform": {
+//        "http_proxy": {
+//          "enabled": true,
+//          "server": "127.0.0.1",
+//          "server_port": 1080
+//        }
+//      }
+//    },
+    {
+      "type": "tproxy",
+      "tag": "tproxy-in",
+      "listen": "::",
+      "listen_port": 1536,
+      "sniff": true
+    }
+  ],
+
+// 这里的 proxyproviedrs 需要使用 https://github.com/yaotthaha/sing-box-pub/tree/dev-yaott
+  "proxyproviders": [
+    {
+      "tag": "Provider1",
+      "url": "Clash.Meta 订阅链接1",
+      "cache_file": "provider1.json",
+      "dns": "https://223.6.6.6/dns-query",
+      "update_interval": "12h",
+      "running_detour": "Proxy",
+      "global_filter": {
+        "white_mode": true,
+        "rules": [
+          "游戏",
+          "专线",
+          "IEPL"
+        ]
+      }
+    },
+    {
+      "tag": "Provider2",
+      "url": "Clash.Meta 订阅链接2",
+      "cache_file": "provider2.json",
+      "dns": "https://223.6.6.6/dns-query",
+      "update_interval": "24h",
+      "running_detour": "Proxy",
+      "global_filter": {
+        "rules": [
+          "到期",
+          "流量",
+          "官网"
+        ]
+      }
+    },
+    {
+      "tag": "Provider3",
+      "url": "Clash.Meta 订阅链接3",
+      "cache_file": "provider3.json",
+      "dns": "https://223.6.6.6/dns-query",
+      "update_interval": "24h",
+      "running_detour": "Proxy"
+    }
+  ],
+  "outbounds": [
+    {
+      "type": "direct",
+      "tag": "direct"
+    },
+    {
+      "type": "block",
+      "tag": "block"
+    },
+    {
+      "type": "dns",
+      "tag": "dns-out"
+    },
+    {
+      "type": "selector",
+      "tag": "Proxy",
+      "outbounds": [
+        "Provider1",
+        "Provider2",
+        "Provider3",
+        "direct"
+      ]
+    }
+  ],
+  "route": {
+    "rules": [
+      {
+        "port": 53,
+        "outbound": "dns-out"
+      },
+      {
+        "clash_mode": "Global",
+        "outbound": "Proxy"
+      },
+      {
+        "clash_mode": "Direct",
+        "outbound": "direct"
+      },
+      {
+        "geosite": "category-ads-all",
+        "outbound": "block"
+      },
+      {
+        "geosite": [
+          "apple@cn",
+          "category-games@cn",
+          "cn",
+          "private"
+        ],
+        "geoip": [
+          "cn",
+          "private"
+        ],
+        "outbound": "direct"
+      }
+    ],
+//    "auto_detect_interface": true,
+//    Tun 一般需要开启
+//    "default_mark": 233,
+//    Tproxy 可能用到
+    "find_process": true,
+    "final": "Proxy"
+  },
+  "experimental": {
+    "clash_api": {
+      "external_controller": "127.0.0.1:9999",
+      "external_ui": "dashboard",
+      "store_selected": true,
+      "store_fakeip": true
+    }
+  }
+}
