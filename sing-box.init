@@ -1,0 +1,29 @@
+#!/sbin/openrc-run
+
+# shellcheck shell=sh disable=SC2034
+
+root_dir=/opt/sing-box
+
+name=$RC_SVCNAME
+description="sing-box service"
+supervisor="supervise-daemon"
+command="$root_dir/bin/sing-box"
+command_args="-D /var/lib/sing-box -c $root_dir/etc/config.json run"
+
+depend() {
+    after net dns
+}
+
+reload() {
+    ebegin "Reloading $RC_SVCNAME"
+    /bin/kill -HUP "$MAINPID"
+    eend $?
+}
+
+start_post() {
+    $root_dir/proxy.sh
+}
+
+stop_pre() {
+    $root_dir/proxy.sh down
+}
