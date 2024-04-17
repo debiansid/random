@@ -1,0 +1,9 @@
+echo 'https://storage.sev.monster/alpine/edge/testing' | sudo tee -a /etc/apk/repositories
+wget https://storage.sev.monster/alpine/edge/testing/x86_64/sevmonster-keys-1-r0.apk
+sudo sh -c '
+  apk add --allow-untrusted ./sevmonster-keys-1-r0.apk
+  apk update \
+    && apk add gcompat \
+    && rm /lib/ld-linux-x86-64.so.2 \
+    && apk add --force-overwrite glibc \
+    && apk add glibc-bin'
