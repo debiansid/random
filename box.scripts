@@ -1,0 +1,176 @@
+#!/system/bin/sh
+
+ export PATH="/data/adb/magisk:/data/adb/ksu/bin:$PATH:/data/data/com.termux/files/usr/bin"
+ 
+  clear; cd ${0%/*}
+
+  normal=$(printf '\033[0m'); green=$(printf '\033[0;32m'); red=$(printf '\033[91m')
+
+  busybox="/data/adb/magisk/busybox"
+  iw="/data/data/com.termux/files/usr/bin/iw"
+  
+# can modify it to your own file .
+ sourcefile="../config_files/tproxy.json"
+# ap_list
+ ap_list=("wlan+" "ap+" "rndis+")
+# PROHIBIT MODIFYING FILE NAMES !!!
+  workfile="../config_files/tproxy.json"
+#  tempfile="../config_files/temp.json"
+  
+# Binary files
+# provider or sing-box
+
+  binfile="../binary_files/provider1.9.0-rc.11"
+
+# Operating mode
+# work mode tun tproxy mixed
+
+  mode="tproxy"
+  port="1536"
+  
+# blacklist
+  package_list=(com.azure.authenticator com.android.email com.ss.android.article.lite com.eg.android.AlipayGphone com.tencent.mm com.tencent.mobileqq com.MobileTicket com.alibaba.android.rimet com.epoint.mobileframenew.zj.chongqing com.autonavi.minimap com.cebbank.mobile.cemb cmb.pb com.jingdong.app.mall com.taobao.taobao com.sankuai.meituan.takeoutnew)
+  
+# IPv4 network segment
+  cidrs=(0.0.0.0/8 10.0.0.0/8 127.0.0.0/8 169.254.0.0/16 172.16.0.0/12 192.168.0.0/16 224.0.0.0/3 255.255.255.255/32)
+
+# IPv6 network segment
+  cidrs6=(::/128 ::1/128 2408:8000::/20 2409:8000::/20 240a:4000::/21 240e::/20 fc00::/7 fe80::/10 ff00::/8)
+
+black_list() {
+for package_name in ${package_list[@]}; do
+    uids=$(grep $package_name /data/system/packages.list | cut -d " " -f2) 
+    [ -n "${uids}" ] && black_uid+=("${uids}")
+done
+}
+
+start() {
+  if [ -f "${binfile}" ]; then
+    chmod 755 ${binfile}
+    chown root:root ${binfile}
+    ulimit -SHn 1048576
+      if [ "${mode}" = "tproxy" ]; then
+        create_tproxy
+      fi
+    ${busybox} setuidgid 0:23333 nohup ${binfile} run -c ${workfile} -D ../run/ > /dev/null 2>&1 &
+  fi
+}
+
+stop() {
+  PID=$(pidof ${binfile})
+  pidof ${binfile} > /dev/null 2>&1 && kill -15 ${PID} > /dev/null 2>&1
+  erase_tproxy
+}
+
+net_ip() {
+  local_ip=$(ip route get 1.1.1.1 | awk '{for(i=1;i<=NF;i++) if ($i=="src") {print $(i+1); break}}') && echo "${local_ip}"
+}
+
+net_id() {
+  # Array of WLAN interfaces
+  wlan_interfaces=( $(iw dev | awk '$1=="Interface"{print $2}') )
+
+  # Loop through WLAN interfaces
+  for interface in "${wlan_interfaces[@]}"; do
+    # Get wifi SSID for the current interface
+    ssid=$(iw dev "$interface" link | awk '/SSID/{print $2}')
+    
+    # Check if ssid is not empty
+    if [ -n "$ssid" ]; then
+      echo "$ssid"
+      return
+    fi
+  done
+  
+  # Default to "mobile" if no wifi SSID found
+  echo "mobile"
+}
+
+
+
+create() {
+  # Create routes and rules
+  ${1} ru a fwmark 1 table ${2}
+  ${1} ro a local ${3} dev lo table ${2}
+  
+  # Create custom chain
+  ${4} -t mangle -N ${5}_EXTERNAL
+  ${4} -t mangle -N ${5}_LOCAL
+  
+  # Create external custom chain rules
+for cidr in ${6}; do
+		if [[ "$cidr" == "192.168.0.0/16" ]]; then
+  ${4} -t mangle -A ${5}_EXTERNAL -d ${cidr} -p udp ! --dport 53 -j RETURN
+  ${4} -t mangle -A ${5}_EXTERNAL -d ${cidr} ! -p udp -j RETURN
+    else
+  ${4} -t mangle -A ${5}_EXTERNAL -d ${cidr} -j RETURN
+		fi
+done
+  ${4} -t mangle -A ${5}_EXTERNAL -p tcp -i lo -j TPROXY --on-port ${port} --tproxy-mark 1
+  ${4} -t mangle -A ${5}_EXTERNAL -p udp -i lo -j TPROXY --on-port ${port} --tproxy-mark 1
+
+  # Allow ap interface
+  # Notice: Old android device may only have one wlan interface.
+  # Some new android device have multiple wlan interface like wlan0(for internet), wlan1(for AP).
+  if [ "${ap_list}" != "" ] ; then
+    for ap in ${ap_list[@]} ; do
+      ${4} -t mangle -A ${5}_EXTERNAL -p tcp -i ${ap} -j TPROXY --on-port ${port} --tproxy-mark 1
+      ${4} -t mangle -A ${5}_EXTERNAL -p udp -i ${ap} -j TPROXY --on-port ${port} --tproxy-mark 1
+    done
+  fi
+  # Create internal custom chain rules
+  ${4} -t mangle -I ${5}_LOCAL -m owner --gid-owner 23333 -j RETURN
+for cidr in ${6}; do
+		if [[ "$cidr" == "192.168.0.0/16" ]]; then
+  ${4} -t mangle -A ${5}_LOCAL -d ${cidr} -p udp ! --dport 53 -j RETURN
+  ${4} -t mangle -A ${5}_LOCAL -d ${cidr} ! -p udp -j RETURN
+		else
+  ${4} -t mangle -A ${5}_LOCAL -d ${cidr} -j RETURN
+		fi
+done
+for puid in ${7}; do
+  ${4} -t mangle -I ${5}_LOCAL -m owner --uid-owner ${puid} -p udp ! --dport 53 -j RETURN
+  ${4} -t mangle -I ${5}_LOCAL -m owner --uid-owner ${puid} ! -p udp -j RETURN
+  ${4} -t mangle -I ${5}_LOCAL -m owner --uid-owner ${puid} -j RETURN
+done
+  ${4} -t mangle -A ${5}_LOCAL -j MARK --set-mark 1
+  # Referencing custom chains
+  ${4} -t mangle -I PREROUTING -j ${5}_EXTERNAL
+  ${4} -t mangle -I OUTPUT -j ${5}_LOCAL
+
+  ${4} -t mangle -N DIVERT
+  ${4} -t mangle -F DIVERT
+
+  ${4} -t mangle -A DIVERT -j MARK --set-mark 1
+  ${4} -t mangle -A DIVERT -j ACCEPT
+
+  ${4} -t mangle -I PREROUTING -p tcp -m socket -j DIVERT
+  ${4} -A OUTPUT -d 127.0.0.1 -p tcp -m owner --gid-owner 23333 -m tcp --dport "${port}" -j REJECT
+}
+
+create_tproxy() {
+  black_list
+  create ip 100 0.0.0.0/0 iptables Tproxy "${cidrs[*]}" "${black_uid[*]}"
+  create "ip -6" 106 ::/0 ip6tables Tproxy6 "${cidrs6[*]}" "${black_uid[*]}"
+}
+
+erase() {
+  ${1} ru d fwmark 1 table ${2}
+  ${1} ro d local ${3} dev lo table ${2}
+  ${4}-save | grep ${5} | grep "\-A" | sed 's/-A/'${4}' -t mangle -D/g' | sh
+  ${4} -t mangle -X ${5}_EXTERNAL
+  ${4} -t mangle -X ${5}_LOCAL
+}
+
+erase_tproxy() {
+  if iptables-save | grep "Tproxy" > /dev/null; then
+    erase ip 100 0.0.0.0/0 iptables Tproxy
+    erase "ip -6" 106 ::/0 ip6tables Tproxy6
+  fi
+}
+
+
+run() { stop; start; }
+
+# Created on April 12 2024. 001
+
