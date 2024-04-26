@@ -99,12 +99,12 @@ create() {
   
   # Create external custom chain rules
 for cidr in ${6}; do
-		if [[ "$cidr" == "192.168.0.0/16" ]]; then
+ if [[ "$cidr" == "192.168.0.0/16" ]]; then
   ${4} -t mangle -A ${5}_EXTERNAL -d ${cidr} -p udp ! --dport 53 -j RETURN
   ${4} -t mangle -A ${5}_EXTERNAL -d ${cidr} ! -p udp -j RETURN
-    else
+ else
   ${4} -t mangle -A ${5}_EXTERNAL -d ${cidr} -j RETURN
-		fi
+fi
 done
   ${4} -t mangle -A ${5}_EXTERNAL -p tcp -i lo -j TPROXY --on-port ${port} --tproxy-mark 1
   ${4} -t mangle -A ${5}_EXTERNAL -p udp -i lo -j TPROXY --on-port ${port} --tproxy-mark 1
