@@ -1,105 +1,72 @@
 #!/usr/sbin/nft -f
 
+# Clear existing rules
 flush ruleset
 
-# Define constants
-#define RESERVED_IP = { /* Add reserved IP addresses here */ }
-#define CHINA_IP = { /* Add Chinese IP addresses here */ }
-
-# Include additional configuration files
+# Include additional configurations first
 include "/etc/nftables.d/*.conf"
-#include "/etc/nftables.d/*.nft"
 
-# Define sing-box table
-table ip sing-box {
-    chain prerouting {
-        type filter hook prerouting priority mangle; policy accept;
-
-        # Skip processing for specific IP ranges
-        ip daddr { $RESERVED_IP, $CHINA_IP, 192.168.0.0/16 } return
-
-        # Mark packets for special handling
-        meta mark 233 return
-
-        # Forward TCP and UDP traffic to local port
-        ip protocol { tcp, udp } tproxy to :1536 meta mark set 1
-    }
-
-    chain output {
-        type route hook output priority mangle; policy accept;
-
-        # Skip processing for specific IP ranges
-        ip daddr { $RESERVED_IP, $CHINA_IP, 192.168.0.0/16 } return
-
-        # Mark packets for special handling
-        meta mark 233 return
-
-        # Mark TCP and UDP packets for special handling
-        ip protocol { tcp, udp } meta mark set 1
-    }
-}
-
-# Delete existing tables to ensure a clean setup
-delete table inet filter
-delete table ip ipv4-nat
-
-# Define the filter table for incoming traffic
-table inet filter {
-    chain input {
-        type filter hook input priority 0; 
-
-        # Drop incoming TCP traffic on ports 80 and 443 and UDP traffic on port 53 on "ppp0" interface
-        iifname "ppp0" tcp dport { 80, 443 } drop
-        iifname "ppp0" udp dport { 53 } drop
-    }
-    
-    chain forward {
-        type filter hook forward priority 0;
-        # Forwarding chain; can add forwarding rules if necessary
-    }
-    
-    chain output {
-        type filter hook output priority 0;
-        # Output chain; can add output rules if necessary
-    }
-}
-
-# Define the NAT table for outgoing traffic
-table ip ipv4-nat {
-    chain postrouting {
-        type nat hook postrouting priority srcnat; policy accept;
-        
-        # Apply full-cone NAT for outgoing traffic on "eth1" and "ppp0" interfaces
-        oifname { eth1, ppp0 } fullcone
-    }
-}
-
-# Delete existing table to ensure a clean setup
-delete table inet fw4
-
-# Define the fw4 table for IPv4 traffic
-table inet fw4 {
+# Combined table for NAT and filtering
+table inet firewall {
+    # NAT Chains
     chain dstnat {
-        type nat hook prerouting priority dstnat; policy accept;
-        
-        # Forward incoming traffic on "ppp0" interface to destination NAT chain
+        type nat hook prerouting priority dstnat; policy accept
         iifname "ppp0" jump dstnat_wan
     }
 
     chain srcnat {
-        type nat hook postrouting priority srcnat; policy accept;
-
-        # Apply source NAT for outgoing traffic on "ppp0" interface
+        type nat hook postrouting priority srcnat; policy accept
         oifname "ppp0" jump srcnat_wan
     }
 
     chain srcnat_wan {
-        # Apply full-cone NAT for outgoing traffic on "ppp0" interface
         fullcone
     }
 
     chain dstnat_wan {
-        # Apply full-cone NAT for incoming traffic on "ppp0" interface
         fullcone
+        # Allow external TCP and UDP access to 192.168.88.254:8809 via ppp0
+        iifname "ppp0" ip protocol tcp udp dport 8809 dnat to 192.168.88.254:8809
+    }
+
+    chain ipv4_postrouting {
+        type nat hook postrouting priority srcnat; policy accept
+        oifname { "eth1", "ppp0" } fullcone
+    }
+
+    # Filter Chains
+    chain input {
+        type filter hook input priority 0; policy accept
+        iifname "ppp0" tcp dport { 80, 443 } drop  # Block HTTP/HTTPS on ppp0
+        iifname "ppp0" udp dport { 53 } drop       # Block DNS on ppp0
+    }
+
+    chain forward {
+        type filter hook forward priority 0; policy accept
+    }
+
+    chain output {
+        type filter hook output priority 0; policy accept
+    }
+}
+
+# Sing-box table for transparent proxy
+table ip sing-box {
+    chain prerouting {
+        type filter hook prerouting priority mangle; policy accept
+        ip daddr { $RESERVED_IP, $CHINA_IP } return      # Bypass reserved/China IPs
+        ip daddr 192.168.0.0/16 return                   # Bypass local network
+        meta mark 233 return                            # Bypass marked packets
+        ip protocol tcp tproxy to 127.0.0.1:1536 meta mark set 1  # TCP proxy
+        ip protocol udp tproxy to 127.0.0.1:1536 meta mark set 1  # UDP proxy
+    }
+
+    chain output {
+        type route hook output priority mangle; policy accept
+        ip daddr { $RESERVED_IP, $CHINA_IP } return      # Bypass reserved/China IPs
+        ip daddr 192.168.0.0/16 return                   # Bypass local network
+        meta mark 233 return                            # Bypass marked packets
+        ip protocol tcp meta mark set 1                 # Mark TCP for routing
+        ip protocol udp meta mark set 1                 # Mark UDP for routing
     }
 }
