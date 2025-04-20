@@ -1,0 +1,73 @@
+#!/usr/sbin/nft -f
+
+# Clear existing rules
+flush ruleset
+
+# Include additional configurations first
+include "/etc/nftables.d/*.conf"
+
+# Combined table for NAT and filtering
+table inet firewall {
+    # NAT Chains
+    chain dstnat {
+        type nat hook prerouting priority dstnat; policy accept
+        iifname "ppp0" jump dstnat_wan
+    }
+
+    chain srcnat {
+        type nat hook postrouting priority srcnat; policy accept
+        oifname "ppp0" jump srcnat_wan
+    }
+
+    chain srcnat_wan {
+        fullcone
+    }
+
+    chain dstnat_wan {
+        fullcone
+        # Allow external TCP and UDP access to 192.168.88.254:8809 via ppp0
+        iifname "ppp0" tcp dport 8809 dnat ip to 192.168.88.254:8809
+        iifname "ppp0" udp dport 8809 dnat ip to 192.168.88.254:8809
+    }
+
+    chain ipv4_postrouting {
+        type nat hook postrouting priority srcnat; policy accept
+        oifname { "eth2", "ppp0" } fullcone
+    }
+
+    # Filter Chains
+    chain input {
+        type filter hook input priority 0; policy accept
+        iifname "ppp0" tcp dport { 80, 443 } drop  # Block HTTP/HTTPS on ppp0
+        iifname "ppp0" udp dport { 53 } drop       # Block DNS on ppp0
+    }
+
+    chain forward {
+        type filter hook forward priority 0; policy accept
+    }
+
+    chain output {
+        type filter hook output priority 0; policy accept
+    }
+}
+
+# Sing-box table for transparent proxy
+table ip sing-box {
+    chain prerouting {
+        type filter hook prerouting priority mangle; policy accept
+        ip daddr { $RESERVED_IP, $CHINA_IP } return      # Bypass reserved/China IPs
+        ip daddr 192.168.0.0/16 return                   # Bypass local network
+        meta mark 233 return                            # Bypass marked packets
+        ip protocol tcp tproxy to 127.0.0.1:1536 meta mark set 1  # TCP proxy
+        ip protocol udp tproxy to 127.0.0.1:1536 meta mark set 1  # UDP proxy
+    }
+
+    chain output {
+        type route hook output priority mangle; policy accept
+        ip daddr { $RESERVED_IP, $CHINA_IP } return      # Bypass reserved/China IPs
+        ip daddr 192.168.0.0/16 return                   # Bypass local network
+        meta mark 233 return                            # Bypass marked packets
+        ip protocol tcp meta mark set 1                 # Mark TCP for routing
+        ip protocol udp meta mark set 1                 # Mark UDP for routing
+    }
+}
